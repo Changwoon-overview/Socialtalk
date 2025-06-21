@@ -35,6 +35,21 @@ final class Sms_Connect {
 	private static $instance = null;
 
 	/**
+	 * Main Sms_Connect Instance.
+	 *
+	 * Ensures only one instance of Sms_Connect is loaded or can be loaded.
+	 *
+	 * @static
+	 * @return Sms_Connect - Main instance.
+	 */
+	public static function instance() {
+		if ( is_null( self::$instance ) ) {
+			self::$instance = new self();
+		}
+		return self::$instance;
+	}
+
+	/**
 	 * Service handlers.
 	 *
 	 * @var array
@@ -44,7 +59,7 @@ final class Sms_Connect {
 	/**
 	 * Sms_Connect constructor.
 	 */
-	public function __construct() {
+	private function __construct() {
 		$this->setup_handlers();
 		$this->add_hooks();
 	}

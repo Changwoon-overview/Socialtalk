@@ -29,7 +29,7 @@ class Alimtalk_Settings_Page extends Base_Settings_Page {
 	 * The option name in the database.
 	 * @var string
 	 */
-	private $option_name = 'sms_connect_alimtalk_options';
+	protected $option_name = 'sms_connect_alimtalk_options';
 
 	/**
 	 * Constructor.
@@ -171,39 +171,9 @@ class Alimtalk_Settings_Page extends Base_Settings_Page {
 			return $sanitized_input;
 		}
 
-		// First, let's get all possible statuses to check for checkboxes.
-		$all_statuses = [];
-		if ( \function_exists( 'wc_get_order_statuses' ) ) {
-			$all_statuses = \array_keys( \wc_get_order_statuses() );
-		}
-		if ( \class_exists( 'WC_Subscriptions' ) ) {
-			$subscription_statuses = [
-				'wc-subscription-payment-complete',
-				'wc-subscription-cancelled',
-				'wc-subscription-on-hold',
-				'wc-subscription-expired',
-			];
-			$all_statuses = \array_merge( $all_statuses, $subscription_statuses );
-		}
-
 		// Sanitize all inputs
 		foreach ( $input as $key => $value ) {
-			if ( strpos( $key, 'send_to_admin_' ) === 0 ) {
-				// It's a checkbox
-				$sanitized_input[ $key ] = ( 'yes' === $value ) ? 'yes' : 'no';
-			} else {
-				// It's a text field
-				$sanitized_input[ $key ] = \sanitize_text_field( $value );
-			}
-		}
-
-		// Now, ensure all 'send_to_admin' checkboxes have a value.
-		// If a checkbox was unchecked, it won't be in the $input array.
-		foreach ( $all_statuses as $status ) {
-			$admin_key = 'send_to_admin_' . $status;
-			if ( ! isset( $sanitized_input[ $admin_key ] ) ) {
-				$sanitized_input[ $admin_key ] = 'no';
-			}
+			$sanitized_input[ $key ] = \sanitize_text_field( $value );
 		}
 
 		return $sanitized_input;
@@ -259,12 +229,13 @@ class Alimtalk_Settings_Page extends Base_Settings_Page {
 
 		// Add 'Send to Admin' checkbox for order statuses
 		if ( $is_order_status ) {
+			$admin_options       = \get_option( $this->admin_option_name, [] );
 			$send_to_admin_key   = 'send_to_admin_' . $id;
-			$send_to_admin_value = $options[ $send_to_admin_key ] ?? 'no';
+			$send_to_admin_value = $admin_options[ $send_to_admin_key ] ?? 'no';
 
 			\printf(
 				'<p><label><input type="checkbox" name="%s[%s]" value="yes" %s> %s</label></p>',
-				\esc_attr( $this->option_name ),
+				\esc_attr( $this->admin_option_name ),
 				\esc_attr( $send_to_admin_key ),
 				\checked( 'yes', $send_to_admin_value, false ),
 				\esc_html__( '관리자에게도 발송', 'sms-connect' )
