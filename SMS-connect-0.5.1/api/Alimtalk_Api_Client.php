@@ -15,9 +15,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Class Alimtalk_Api_Client
  *
- * Handles communication with the Kakao Alimtalk API provider.
+ * Handles sending Alimtalk messages via a 3rd party API.
  */
 class Alimtalk_Api_Client {
+	use Point_Check_Trait;
 
 	/**
 	 * The single instance of the class.
@@ -78,10 +79,14 @@ class Alimtalk_Api_Client {
 	 *
 	 * @param string $template_code The Alimtalk template code.
 	 * @param string $recipient The phone number to send to.
-	 * @param array  $template_vars The variables to replace in the template.
-	 * @return array|\WP_Error The response from the API or a WP_Error on failure.
+	 * @param array  $template_vars Associative array of template variables.
+	 * @return array|\WP_Error The response from the API.
 	 */
 	public function send_request( $template_code, $recipient, $template_vars = [] ) {
+		if ( empty( $this->api_key ) || empty( $this->sender_key ) ) {
+			return new \WP_Error( 'invalid_credentials', 'API key or Sender Key is missing.' );
+		}
+
 		$url = $this->api_url . '/send/alimtalk'; // Example endpoint
 
 		$headers = [
@@ -102,32 +107,12 @@ class Alimtalk_Api_Client {
 			'method'  => 'POST',
 			'headers' => $headers,
 			'body'    => wp_json_encode( $body ),
-			'timeout' => 15,
+			'timeout' => 45,
 		];
 
-		$response = wp_remote_post( $url, $args );
+		$response = \wp_remote_post( $this->api_url, $args );
 
-		// After a successful request, check the balance.
-		if ( ! is_wp_error( $response ) && 200 === wp_remote_retrieve_response_code( $response ) ) {
-			$response_body = wp_remote_retrieve_body( $response );
-			$data = json_decode( $response_body, true );
-
-			// Check for balance/point in the response data. The key might differ by API provider.
-			$current_points = 0;
-			if ( isset( $data['point'] ) ) {
-				$current_points = (int) $data['point'];
-			} elseif ( isset( $data['balance'] ) ) {
-				$current_points = (int) $data['balance'];
-			}
-
-			if ( $current_points > 0 ) {
-				// Get the Message Manager and run the check.
-				$sms_connect = \SmsConnect\Sms_Connect::instance();
-				if ( isset( $sms_connect->handlers['message_manager'] ) ) {
-					$sms_connect->handlers['message_manager']->check_and_notify_low_points( $current_points );
-				}
-			}
-		}
+		$this->check_points_from_response( $response );
 
 		return $response;
 	}

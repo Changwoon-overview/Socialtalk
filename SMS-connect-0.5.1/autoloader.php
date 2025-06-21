@@ -36,7 +36,13 @@ function sms_connect_autoloader( $class ) {
 	// Replace the namespace prefix with the base directory, replace namespace
 	// separators with directory separators in the relative class name, append
 	// with .php
-	$file = $base_dir . str_replace( '\\', '/', $relative_class ) . '.php';
+    $parts = explode('\\', $relative_class);
+    if (isset($parts[0])) {
+        $parts[0] = strtolower($parts[0]);
+    }
+    $relative_path = implode('/', $parts);
+
+	$file = $base_dir . $relative_path . '.php';
 
 	// If the file exists, require it.
 	if ( file_exists( $file ) ) {

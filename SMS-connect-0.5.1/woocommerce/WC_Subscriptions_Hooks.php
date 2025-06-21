@@ -56,40 +56,42 @@ class WC_Subscriptions_Hooks {
      * @param string           $status_key_suffix The status key suffix (e.g., 'payment-complete', 'cancelled').
      */
 	private function send_notification( $subscription, $status_key_suffix ) {
-		if ( ! $subscription ) {
-			return;
-		}
-
 		$status_key = 'wc-' . $status_key_suffix;
 
-		// 알림톡 설정을 먼저 확인
-		$alimtalk_options = get_option( 'sms_connect_alimtalk_options', [] );
-		$template_key     = 'template_' . $status_key;
+		$alimtalk_options = \get_option( 'sms_connect_alimtalk_options', [] );
+		$sms_options      = \get_option( 'sms_connect_sms_options', [] );
 
-		if ( isset( $alimtalk_options[ $template_key ] ) && ! empty( $alimtalk_options[ $template_key ] ) ) {
-			$this->send_alimtalk( $alimtalk_options[ $template_key ], $subscription );
-			return; // 알림톡 발송 시 SMS는 보내지 않음
+		// Check Alimtalk settings first
+		if ( ! empty( $alimtalk_options[ $status_key ] ) ) {
+			$this->send_alimtalk( $alimtalk_options[ $status_key ], $subscription );
+			// Also send to admin if checked
+			if ( isset( $alimtalk_options[ 'send_to_admin_' . $status_key ] ) && 'yes' === $alimtalk_options[ 'send_to_admin_' . $status_key ] ) {
+				$this->send_alimtalk( $alimtalk_options[ $status_key ], $subscription, [ 'send_to_admin' => true ] );
+			}
 		}
 
-		// 알림톡 설정이 없으면 SMS 설정 확인
-		$sms_options = get_option( 'sms_connect_sms_options', [] );
-		if ( isset( $sms_options[ $status_key ] ) && ! empty( $sms_options[ $status_key ] ) ) {
+		// Check SMS settings
+		if ( ! empty( $sms_options[ $status_key ] ) ) {
 			$this->send_sms( $sms_options[ $status_key ], $subscription );
+			// Also send to admin if checked
+			if ( isset( $sms_options[ 'send_to_admin_' . $status_key ] ) && 'yes' === $sms_options[ 'send_to_admin_' . $status_key ] ) {
+				$this->send_sms( $sms_options[ $status_key ], $subscription, [ 'send_to_admin' => true ] );
+			}
 		}
 	}
 
 	/**
-	 * 알림톡 메시지를 보냅니다.
+	 * Sends an Alimtalk notification for a subscription event.
 	 *
 	 * @param string           $template_code The Alimtalk template code.
 	 * @param \WC_Subscription $subscription  The subscription object.
+	 * @param array $options Additional options.
 	 */
-	private function send_alimtalk( $template_code, $subscription ) {
-		$sms_connect = \SmsConnect\Sms_Connect::instance();
-		$recipient   = $subscription->get_billing_phone();
-        $order       = $subscription->get_parent(); // 템플릿 변수를 위해 주문 객체를 가져옵니다.
+	private function send_alimtalk( $template_code, $subscription, $options = [] ) {
+		$recipient = $subscription->get_billing_phone();
+		$order     = $subscription->get_parent();
 
-		if ( empty( $recipient ) || !$order ) {
+		if ( empty( $recipient ) || ! $order ) {
 			return;
 		}
         
@@ -113,13 +115,13 @@ class WC_Subscriptions_Hooks {
 	 *
 	 * @param string           $message_template The message template string.
 	 * @param \WC_Subscription $subscription     The subscription object.
+	 * @param array $options Additional options.
 	 */
-	private function send_sms( $message_template, $subscription ) {
-		$sms_connect = \SmsConnect\Sms_Connect::instance();
-		$recipient   = $subscription->get_billing_phone();
-        $order       = $subscription->get_parent(); // 템플릿 변수를 위해 주문 객체를 가져옵니다.
+	private function send_sms( $message_template, $subscription, $options = [] ) {
+		$recipient = $subscription->get_billing_phone();
+		$order     = $subscription->get_parent();
 
-		if ( empty( $recipient ) || !$order ) {
+		if ( empty( $recipient ) || ! $order ) {
 			return;
 		}
 

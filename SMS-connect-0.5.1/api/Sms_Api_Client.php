@@ -15,9 +15,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Class Sms_Api_Client
  *
- * Handles communication with the SMS API provider.
+ * Handles sending SMS messages via a 3rd party API.
  */
 class Sms_Api_Client {
+	use Point_Check_Trait;
 
 	/**
 	 * The single instance of the class.
@@ -81,6 +82,10 @@ class Sms_Api_Client {
 	 * @return array|WP_Error The response from the API or a WP_Error on failure.
 	 */
 	public function send_request( $endpoint, $body = [], $method = 'POST' ) {
+		if ( empty( $this->api_key ) || empty( $this->api_secret ) ) {
+			return new \WP_Error( 'invalid_credentials', 'API Key or Secret is missing.' );
+		}
+
 		$url = $this->api_url . $endpoint;
 
 		$headers = [
@@ -92,37 +97,12 @@ class Sms_Api_Client {
 			'method'  => $method,
 			'headers' => $headers,
 			'body'    => wp_json_encode( $body ),
-			'timeout' => 15, // 15 seconds timeout
+			'timeout' => 45, // 15 seconds timeout
 		];
 
-		if ( 'POST' === $method ) {
-			$response = wp_remote_post( $url, $args );
-		} else {
-			$response = wp_remote_get( $url, $args );
-		}
+		$response = \wp_remote_post( $this->api_url . $endpoint, $args );
 
-		// After a successful request, check the balance.
-		if ( ! is_wp_error( $response ) && 200 === wp_remote_retrieve_response_code( $response ) ) {
-			$response_body = wp_remote_retrieve_body( $response );
-			$data = json_decode( $response_body, true );
-
-			// Check for balance/point in the response data. The key might differ by API provider.
-			// We'll check for common keys like 'point' or 'balance'.
-			$current_points = 0;
-			if ( isset( $data['point'] ) ) {
-				$current_points = (int) $data['point'];
-			} elseif ( isset( $data['balance'] ) ) {
-				$current_points = (int) $data['balance'];
-			}
-
-			if ( $current_points > 0 ) {
-				// Get the Message Manager and run the check.
-				$sms_connect = \SmsConnect\Sms_Connect::instance();
-				if ( isset( $sms_connect->handlers['message_manager'] ) ) {
-					$sms_connect->handlers['message_manager']->check_and_notify_low_points( $current_points );
-				}
-			}
-		}
+		$this->check_points_from_response( $response );
 
 		return $response;
 	}

@@ -91,19 +91,42 @@ class Template_Variables {
 	 * @return string The value.
 	 */
 	private function get_order_variable( $variable ) {
-		$order = $this->source_object;
-		$variable_map = [
-			'order_id'         => $order->get_id(),
-			'order_number'     => $order->get_order_number(),
-			'order_date'       => wc_format_datetime( $order->get_date_created() ),
-			'order_total'      => $order->get_formatted_order_total(),
-			'customer_name'    => $order->get_billing_first_name(),
-			'customer_fullname'=> $order->get_formatted_billing_full_name(),
-			'billing_phone'    => $order->get_billing_phone(),
-			'shop_name'        => get_bloginfo( 'name' ),
-		];
+		if ( null === $this->source_object || ! is_a( $this->source_object, 'WC_Order' ) ) {
+			return null;
+		}
 
-		return isset( $variable_map[ $variable ] ) ? $variable_map[ $variable ] : '{' . $variable . '}';
+		$value = null;
+		switch ( $variable ) {
+			case 'order_id':
+				$value = $this->source_object->get_id();
+				break;
+			case 'order_number':
+				$value = $this->source_object->get_order_number();
+				break;
+			case 'order_date':
+				$value = $this->source_object->get_date_created() ? $this->source_object->get_date_created()->date_i18n( 'Y-m-d' ) : '';
+				break;
+			case 'order_total':
+				$value = $this->source_object->get_formatted_order_total();
+				break;
+			case 'customer_name':
+				$value = $this->source_object->get_billing_first_name();
+				break;
+			case 'customer_fullname':
+				$value = $this->source_object->get_formatted_billing_full_name();
+				break;
+			case 'billing_phone':
+				$value = $this->source_object->get_billing_phone();
+				break;
+			case 'shop_name':
+				$value = get_bloginfo( 'name' );
+				break;
+			// Add more order cases as needed.
+			default:
+				$value = '{' . $variable . '}';
+				break;
+		}
+		return $value;
 	}
 
     /**
@@ -113,29 +136,34 @@ class Template_Variables {
 	 * @return string The value.
 	 */
     private function get_subscription_variable( $variable ) {
-        $subscription = $this->source_object;
-        $order = $subscription->get_parent(); // Get parent order for some details
-
-		$variable_map = [
-            'subscription_id'           => $subscription->get_id(),
-            'subscription_status'       => wcs_get_subscription_status_name($subscription->get_status()),
-            'subscription_start_date'   => wc_format_datetime( $subscription->get_date_created() ),
-            'subscription_next_payment' => wc_format_datetime( $subscription->get_date('next_payment') ),
-            'customer_name'             => $subscription->get_billing_first_name(),
-            'customer_fullname'         => $subscription->get_formatted_billing_full_name(),
-			'billing_phone'             => $subscription->get_billing_phone(),
-			'shop_name'                 => get_bloginfo( 'name' ),
-		];
-        
-        // Fallback to order variables if not found in subscription
-        $value = isset( $variable_map[ $variable ] ) ? $variable_map[ $variable ] : null;
-        if ($value === null && $order) {
-            $this->source_object = $order; // Temporarily switch source to parent order
-            $value = $this->get_order_variable($variable);
-            $this->source_object = $subscription; // Switch back
+        if ( null === $this->source_object || ! is_a( $this->source_object, 'WC_Subscription' ) ) {
+            return null;
         }
 
-		return $value !== null ? $value : '{' . $variable . '}';
+        $value = null;
+        $order = $this->source_object->get_parent(); // Subscriptions have a parent order
+
+        switch ( $variable ) {
+            case 'subscription_id':
+                $value = $this->source_object->get_id();
+                break;
+            case 'subscription_status':
+                $value = $this->source_object->get_status();
+                break;
+            case 'next_payment_date':
+                $value = $this->source_object->get_date_to_display( 'next_payment' );
+                break;
+            // For order-related variables, we can call get_order_variable
+            default:
+                if ($order) {
+                    $original_source = $this->source_object;
+                    $this->source_object = $order;
+                    $value = $this->get_order_variable( $variable );
+                    $this->source_object = $original_source; // Restore original source
+                }
+                break;
+        }
+        return $value;
     }
 
     /**
