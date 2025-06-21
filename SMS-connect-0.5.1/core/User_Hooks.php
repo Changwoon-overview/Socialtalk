@@ -94,7 +94,7 @@ class User_Hooks {
 	 * @param array    $extra_data    Optional extra data.
 	 */
 	private function send_alimtalk( $template_code, $user, $extra_data = [] ) {
-		$sms_connect = \SmsConnect\Sms_Connect::instance();
+		$sms_connect = \SmsConnect\SmsConnect::instance();
 		$recipient = get_user_meta( $user->ID, 'billing_phone', true );
 
 		if ( empty( $recipient ) ) {
@@ -102,7 +102,7 @@ class User_Hooks {
 		}
 
 		$template_vars = $sms_connect->handlers['template_variables']->extract_variables_for_api( '', $user, $extra_data );
-		$response = $sms_connect->handlers['alimtalk_api_client']->send_request( $template_code, $recipient, $template_vars );
+		$response = $sms_connect->handlers['alimtalk_api_client']->send_alimtalk( $template_code, $recipient, $template_vars );
 
 		$this->log_response( $response, [
 			'order_id'      => $user->ID, // Log user ID in place of order ID
@@ -120,8 +120,8 @@ class User_Hooks {
 	 * @param array    $extra_data       Optional extra data.
 	 */
 	private function send_sms( $message_template, $user, $extra_data = [] ) {
-		$sms_connect = \SmsConnect\Sms_Connect::instance();
-		$recipient = get_user_meta( $user->ID, 'billing_phone', true );
+		$sms_connect = \SmsConnect\SmsConnect::instance();
+		$recipient = \get_user_meta( $user->ID, 'billing_phone', true );
 
 		if ( empty( $recipient ) ) {
 			return;
@@ -129,7 +129,14 @@ class User_Hooks {
 
 		$message = $sms_connect->handlers['template_variables']->replace_variables( $message_template, $user, $extra_data );
 		$message_type = $sms_connect->handlers['message_manager']->get_message_type( $message );
-		$sender = get_option( 'sms_connect_sender_number', '' );
+		
+		// 발송자 번호는 일반 설정에서 가져옴
+		$general_options = \get_option( 'sms_connect_options', [] );
+		$sender = $general_options['sender_number'] ?? '';
+
+		if ( empty( $sender ) ) {
+			return;
+		}
 
 		$api_data = [
 			'to'   => $recipient,
@@ -137,15 +144,20 @@ class User_Hooks {
 			'text' => $message,
 			'type' => $message_type,
 		];
-		
+
 		$response = $sms_connect->handlers['api_client']->send_request( '/messages/v4/send', $api_data );
 
-		$this->log_response( $response, [
-			'order_id'  => $user->ID, // Log user ID
-			'recipient' => $recipient,
-			'type'      => $message_type . ' (User)',
-			'message'   => $message,
-		] );
+		$status = 'Failure';
+		$response_body = '';
+
+		if ( ! \is_wp_error( $response ) ) {
+			$status = 'Success';
+			$response_body = \wp_remote_retrieve_body( $response );
+		} else {
+			$response_body = $response->get_error_message();
+		}
+
+		$this->log_message( 0, $recipient, 'SMS', $status, $message, '', $response_body );
 	}
 
 	/**
@@ -186,4 +198,44 @@ class User_Hooks {
 		$data = wp_parse_args( $log_data, $defaults );
 		$wpdb->insert( $table_name, $data );
     }
+
+	/**
+	 * Logs a message to the database.
+	 *
+	 * @param int    $order_id      The ID of the order (0 for user events).
+	 * @param string $recipient     The recipient's phone number.
+	 * @param string $type          The type of message (e.g., 'SMS', 'Alimtalk').
+	 * @param string $status        The status of the message.
+	 * @param string $message       The content of the message.
+	 * @param string $template_code The template code used for the message.
+	 * @param string $response      The API response body.
+	 */
+	private function log_message( $order_id, $recipient, $type, $status, $message, $template_code, $response ) {
+		global $wpdb;
+		$table_name = $wpdb->prefix . 'sms_connect_logs';
+
+		$wpdb->insert(
+			$table_name,
+			[
+				'sent_at'       => \current_time( 'mysql' ),
+				'order_id'      => $order_id,
+				'recipient'     => $recipient,
+				'type'          => $type,
+				'status'        => $status,
+				'message'       => $message,
+				'template_code' => $template_code,
+				'response'      => $response,
+			],
+			[
+				'%s', // sent_at
+				'%d', // order_id
+				'%s', // recipient
+				'%s', // type
+				'%s', // status
+				'%s', // message
+				'%s', // template_code
+				'%s', // response
+			]
+		);
+	}
 } 

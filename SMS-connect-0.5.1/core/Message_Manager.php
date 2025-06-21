@@ -7,6 +7,9 @@
 
 namespace SmsConnect\Core;
 
+use SmsConnect\API\Alimtalk_Api_Client;
+use SmsConnect\API\Sms_Api_Client;
+
 // Exit if accessed directly.
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -18,6 +21,49 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Manages message properties like type (SMS/LMS) based on content.
  */
 class Message_Manager {
+
+	/**
+	 * The single instance of the class.
+	 *
+	 * @var Message_Manager|null
+	 */
+	private static $instance = null;
+
+	/**
+	 * SMS API Client.
+	 *
+	 * @var Sms_Api_Client
+	 */
+	private $sms_api_client;
+
+	/**
+	 * Alimtalk API Client.
+	 *
+	 * @var Alimtalk_Api_Client
+	 */
+	private $alimtalk_api_client;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param Sms_Api_Client      $sms_api_client      The SMS API client instance.
+	 * @param Alimtalk_Api_Client $alimtalk_api_client The Alimtalk API client instance.
+	 */
+	public function __construct( Sms_Api_Client $sms_api_client, Alimtalk_Api_Client $alimtalk_api_client ) {
+		$this->sms_api_client      = $sms_api_client;
+		$this->alimtalk_api_client = $alimtalk_api_client;
+		self::$instance = $this;
+	}
+
+	/**
+	 * Get the single instance of the class.
+	 *
+	 * @return Message_Manager|null
+	 */
+	public static function get_instance() {
+		return self::$instance;
+	}
+
 	/**
 	 * Get the message type based on its content length.
 	 *
@@ -91,11 +137,11 @@ class Message_Manager {
 	 */
 	public function check_and_notify_low_points( $current_points ) {
 		// Check if the notification has been sent recently.
-		if ( get_transient( 'sms_connect_low_point_notified' ) ) {
+		if ( \get_transient( 'sms_connect_low_point_notified' ) ) {
 			return;
 		}
 
-		$options = get_option( 'sms_connect_options', [] );
+		$options = \get_option( 'sms_connect_settings', [] );
 		$threshold = isset( $options['low_point_threshold'] ) ? (int) $options['low_point_threshold'] : 0;
 		$message_template = isset( $options['low_point_message'] ) ? $options['low_point_message'] : '';
 
@@ -107,14 +153,14 @@ class Message_Manager {
 			}
 
 			// Replace variables in the message.
-			$message = str_replace( '{current_points}', $current_points, $message_template );
-			$message = str_replace( '{shop_name}', get_bloginfo( 'name' ), $message );
+			$message = \str_replace( '{current_points}', $current_points, $message_template );
+			$message = \str_replace( '{shop_name}', \get_bloginfo( 'name' ), $message );
 
 			// Send the SMS to all admins.
 			$this->send_sms( $admin_phones, $message );
 			
 			// Set a transient to prevent re-sending the notice for 24 hours.
-			set_transient( 'sms_connect_low_point_notified', true, DAY_IN_SECONDS );
+			\set_transient( 'sms_connect_low_point_notified', true, DAY_IN_SECONDS );
 		}
 	}
 
@@ -131,10 +177,14 @@ class Message_Manager {
 			return;
 		}
 
-		$sms_connect  = \SmsConnect\Sms_Connect::instance();
+		$options      = \get_option( 'sms_connect_settings', [] );
+		$sender       = $options['sender_number'] ?? '';
 		$message_type = $this->get_message_type( $message );
-		$sender       = get_option( 'sms_connect_sender_number', '' );
 		$recipients   = (array) $recipients; // Ensure it's an array.
+
+		if ( empty( $sender ) ) {
+			return;
+		}
 
 		foreach ( $recipients as $recipient ) {
 			if ( empty( $recipient ) ) {
@@ -146,12 +196,50 @@ class Message_Manager {
 				'text' => $message,
 				'type' => $message_type,
 			];
-
-			// We are calling the API client directly here for internal system messages.
-			$sms_connect->handlers['api_client']->send_request( '/messages/v4/send', $api_data );
+			
+			$this->sms_api_client->send_request( '/messages/v4/send', $api_data );
 
 			// Note: We are not logging these internal notifications to the main DB log to avoid clutter.
 			// This could be changed if logging is required.
+		}
+	}
+
+	/**
+	 * Sends an Alimtalk to one or more recipients.
+	 *
+	 * @param string|array $recipients A single phone number or an array of phone numbers.
+	 * @param string       $template_code The Alimtalk template code.
+	 * @param array        $template_vars Associative array of template variables.
+	 * @return void
+	 */
+	public function send_alimtalk( $recipients, $template_code, $template_vars = [] ) {
+		if ( empty( $recipients ) || empty( $template_code ) ) {
+			return;
+		}
+
+		$recipients = (array) $recipients;
+
+		foreach ( $recipients as $recipient ) {
+			if ( empty( $recipient ) ) {
+				continue;
+			}
+			
+			$this->alimtalk_api_client->send_alimtalk( $template_code, $recipient, $template_vars );
+
+			// Note: We are not logging these internal notifications to the main DB log to avoid clutter.
+			// This could be changed if logging is required.
+		}
+	}
+
+	/**
+	 * Log a message with a specific level.
+	 *
+	 * @param string $message The message to log
+	 * @param string $level   The log level (info, warning, error)
+	 */
+	private function log_message( $message, $level = 'info' ) {
+		if ( \function_exists( 'error_log' ) ) {
+			\error_log( "[SMS 연결 - {$level}] {$message}" );
 		}
 	}
 } 

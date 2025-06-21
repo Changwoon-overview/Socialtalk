@@ -26,6 +26,13 @@ class Admin_Menu {
 	private $dashboard_page;
 
 	/**
+	 * The history page handler.
+	 *
+	 * @var History_Page
+	 */
+	private $history_page;
+
+	/**
 	 * The general settings page handler.
 	 *
 	 * @var Settings_Page
@@ -58,23 +65,22 @@ class Admin_Menu {
 	 */
 	public function __construct() {
 		$this->dashboard_page = new Dashboard();
+		$this->history_page = new History_Page();
 		$this->settings_page = new Settings_Page();
 		$this->sms_settings_page = new Sms_Settings_Page();
 		$this->alimtalk_settings_page = new Alimtalk_Settings_Page();
 		$this->rule_settings_page = new Rule_Settings_Page();
 
-		Rule_Settings_Page::register(); // Handle form submissions for the rule settings page.
-
-		add_action( 'admin_menu', [ $this, 'register_menus' ] );
+		\add_action( 'admin_menu', [ $this, 'register_menus' ] );
 	}
 
 	/**
 	 * Register the admin menus.
 	 */
 	public function register_menus() {
-		add_menu_page(
-			__( 'SMS Connect', 'sms-connect' ),
-			__( 'SMS Connect', 'sms-connect' ),
+		\add_menu_page(
+			\__( 'SMS 연결', 'sms-connect' ),
+			\__( 'SMS 연결', 'sms-connect' ),
 			'manage_options',
 			'sms-connect-dashboard',
 			[ $this->dashboard_page, 'display_page' ],
@@ -82,46 +88,46 @@ class Admin_Menu {
 			58
 		);
 
-		add_submenu_page(
-			'sms-connect',
-			__( 'History', 'sms-connect' ),
-			__( 'History', 'sms-connect' ),
+		\add_submenu_page(
+			'sms-connect-dashboard',
+			\__( '발송 기록', 'sms-connect' ),
+			\__( '발송 기록', 'sms-connect' ),
 			'manage_options',
 			'sms-connect-history',
-			[ new History_Page(), 'display_page' ]
+			[ $this->history_page, 'display_page' ]
 		);
 
-		add_submenu_page(
-			'sms-connect',
-			__( 'General Settings', 'sms-connect' ),
-			__( 'General Settings', 'sms-connect' ),
+		\add_submenu_page(
+			'sms-connect-dashboard',
+			\__( '기본 설정', 'sms-connect' ),
+			\__( '기본 설정', 'sms-connect' ),
 			'manage_options',
 			'sms-connect-settings',
 			[ $this->settings_page, 'render_page' ]
 		);
 
-		add_submenu_page(
-			'sms-connect',
-			__( 'SMS Settings', 'sms-connect' ),
-			__( 'SMS Settings', 'sms-connect' ),
+		\add_submenu_page(
+			'sms-connect-dashboard',
+			\__( 'SMS 설정', 'sms-connect' ),
+			\__( 'SMS 설정', 'sms-connect' ),
 			'manage_options',
 			'sms-connect-sms-settings',
 			[ $this->sms_settings_page, 'render_page' ]
 		);
 
-		add_submenu_page(
-			'sms-connect',
-			__( 'Alimtalk Settings', 'sms-connect' ),
-			__( 'Alimtalk Settings', 'sms-connect' ),
+		\add_submenu_page(
+			'sms-connect-dashboard',
+			\__( '알림톡 설정', 'sms-connect' ),
+			\__( '알림톡 설정', 'sms-connect' ),
 			'manage_options',
 			'sms-connect-alimtalk-settings',
 			[ $this->alimtalk_settings_page, 'render_page' ]
 		);
 
-		add_submenu_page(
-			'sms-connect',
-			__( '고급 발송 규칙', 'sms-connect' ),
-			__( '고급 발송 규칙', 'sms-connect' ),
+		\add_submenu_page(
+			'sms-connect-dashboard',
+			\__( '고급 발송 규칙', 'sms-connect' ),
+			\__( '고급 발송 규칙', 'sms-connect' ),
 			'manage_options',
 			Rule_Settings_Page::PAGE_SLUG,
 			[ $this->rule_settings_page, 'render_page' ]

@@ -88,18 +88,18 @@ class WC_Subscriptions_Hooks {
 	 * @param array $options Additional options.
 	 */
 	private function send_alimtalk( $template_code, $subscription, $options = [] ) {
+		$sms_connect = \SmsConnect\SmsConnect::instance();
 		$recipient = $subscription->get_billing_phone();
-		$order     = $subscription->get_parent();
 
-		if ( empty( $recipient ) || ! $order ) {
+		if ( empty( $recipient ) || ! $subscription->get_parent() ) {
 			return;
 		}
         
 		// 템플릿 변수 처리
-		$message_with_vars = $sms_connect->handlers['template_variables']->replace_variables( '', $order, $subscription );
-		$template_vars     = $sms_connect->handlers['template_variables']->extract_variables_for_api( '', $order, $subscription );
+		$template_vars     = $sms_connect->handlers['template_variables']->extract_variables_for_api( '', $subscription );
+		$message_with_vars = sprintf( 'Alimtalk for subscription #%s', $subscription->get_id() );
 
-		$response = $sms_connect->handlers['alimtalk_api_client']->send_request( $template_code, $recipient, $template_vars );
+		$response = $sms_connect->handlers['alimtalk_api_client']->send_alimtalk( $template_code, $recipient, $template_vars );
 
 		$this->log_response( $response, [
 			'order_id'      => $subscription->get_id(), // 로그에는 구독 ID를 기록
@@ -118,16 +118,23 @@ class WC_Subscriptions_Hooks {
 	 * @param array $options Additional options.
 	 */
 	private function send_sms( $message_template, $subscription, $options = [] ) {
+		$sms_connect = \SmsConnect\SmsConnect::instance();
 		$recipient = $subscription->get_billing_phone();
-		$order     = $subscription->get_parent();
 
-		if ( empty( $recipient ) || ! $order ) {
+		if ( empty( $recipient ) || ! $subscription->get_parent() ) {
 			return;
 		}
 
-		$message      = $sms_connect->handlers['template_variables']->replace_variables( $message_template, $order, $subscription );
+		$message      = $sms_connect->handlers['template_variables']->replace_variables( $message_template, $subscription );
 		$message_type = $sms_connect->handlers['message_manager']->get_message_type( $message );
-		$sender       = get_option( 'sms_connect_sender_number', '' );
+		
+		// 발송자 번호는 일반 설정에서 가져옴
+		$general_options = \get_option( 'sms_connect_options', [] );
+		$sender = $general_options['sender_number'] ?? '';
+
+		if ( empty( $sender ) ) {
+			return;
+		}
 
 		$api_data = [
 			'to'   => $recipient,
@@ -137,13 +144,18 @@ class WC_Subscriptions_Hooks {
 		];
 
 		$response = $sms_connect->handlers['api_client']->send_request( '/messages/v4/send', $api_data );
-		
-        $this->log_response( $response, [
-			'order_id'  => $subscription->get_id(), // 로그에는 구독 ID를 기록
-			'recipient' => $recipient,
-			'type'      => $message_type,
-			'message'   => $message,
-		] );
+
+		$status = 'Failure';
+		$response_body = '';
+
+		if ( ! \is_wp_error( $response ) ) {
+			$status = 'Success';
+			$response_body = \wp_remote_retrieve_body( $response );
+		} else {
+			$response_body = $response->get_error_message();
+		}
+
+		$this->log_message( $subscription->get_parent_id(), $recipient, 'SMS', $status, $message, '', $response_body );
 	}
     
     /**
@@ -195,6 +207,46 @@ class WC_Subscriptions_Hooks {
 		$data = wp_parse_args( $data, $defaults );
 
 		$wpdb->insert( $table_name, $data );
+	}
+
+	/**
+	 * Logs a message to the database.
+	 *
+	 * @param int    $order_id      The order ID.
+	 * @param string $recipient     The recipient phone number.
+	 * @param string $type          The message type.
+	 * @param string $status        The status.
+	 * @param string $message       The message content.
+	 * @param string $template_code The template code.
+	 * @param string $response      The API response.
+	 */
+	private function log_message( $order_id, $recipient, $type, $status, $message, $template_code = '', $response = '' ) {
+		global $wpdb;
+		$table_name = $wpdb->prefix . 'sms_connect_logs';
+
+		$wpdb->insert(
+			$table_name,
+			[
+				'sent_at'       => \current_time( 'mysql' ),
+				'order_id'      => $order_id,
+				'recipient'     => $recipient,
+				'type'          => $type,
+				'status'        => $status,
+				'message'       => $message,
+				'template_code' => $template_code,
+				'response'      => $response,
+			],
+			[
+				'%s', // sent_at
+				'%d', // order_id
+				'%s', // recipient
+				'%s', // type
+				'%s', // status
+				'%s', // message
+				'%s', // template_code
+				'%s', // response
+			]
+		);
 	}
 }
 

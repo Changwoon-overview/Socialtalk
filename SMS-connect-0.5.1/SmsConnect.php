@@ -17,30 +17,31 @@ use SmsConnect\Core\Template_Variables;
 use SmsConnect\Core\Message_Manager;
 use SmsConnect\WooCommerce\WC_Hooks;
 use SmsConnect\Admin\Admin_Menu;
+use SmsConnect\Admin\Admin_Notices;
 use SmsConnect\API\Alimtalk_Api_Client;
 use SmsConnect\WooCommerce\WC_Subscriptions_Hooks;
 use SmsConnect\Core\User_Hooks;
 
 /**
- * Main Sms_Connect Class.
+ * Main SmsConnect Class.
  *
- * @class Sms_Connect
+ * @class SmsConnect
  */
-final class Sms_Connect {
+final class SmsConnect {
 	/**
 	 * The single instance of the class.
 	 *
-	 * @var Sms_Connect|null
+	 * @var SmsConnect|null
 	 */
 	private static $instance = null;
 
 	/**
-	 * Main Sms_Connect Instance.
+	 * Main SmsConnect Instance.
 	 *
-	 * Ensures only one instance of Sms_Connect is loaded or can be loaded.
+	 * Ensures only one instance of SmsConnect is loaded or can be loaded.
 	 *
 	 * @static
-	 * @return Sms_Connect - Main instance.
+	 * @return SmsConnect - Main instance.
 	 */
 	public static function instance() {
 		if ( is_null( self::$instance ) ) {
@@ -57,7 +58,7 @@ final class Sms_Connect {
 	public $handlers = [];
 
 	/**
-	 * Sms_Connect constructor.
+	 * SmsConnect constructor.
 	 */
 	private function __construct() {
 		$this->setup_handlers();
@@ -68,11 +69,23 @@ final class Sms_Connect {
 	 * Set up all the service handlers.
 	 */
 	private function setup_handlers() {
+		// API 클라이언트들을 먼저 초기화
 		$this->handlers['api_client'] = Sms_Api_Client::get_instance();
 		$this->handlers['alimtalk_api_client'] = Alimtalk_Api_Client::get_instance();
+		
+		// 템플릿 변수 핸들러 초기화
 		$this->handlers['template_variables'] = new Template_Variables();
-		$this->handlers['message_manager'] = new Message_Manager();
+		
+		// Message_Manager는 API 클라이언트들을 의존성으로 받음
+		$this->handlers['message_manager'] = new Message_Manager(
+			$this->handlers['api_client'],
+			$this->handlers['alimtalk_api_client']
+		);
+		
+		// WooCommerce 훅 초기화
 		$this->handlers['wc_hooks'] = new WC_Hooks();
+		
+		// 사용자 관련 훅 초기화
 		$this->handlers['user_hooks'] = new User_Hooks();
 
 		// Load subscriptions hooks only if the plugin is active.
@@ -82,6 +95,8 @@ final class Sms_Connect {
 
 		if ( is_admin() ) {
 			$this->handlers['admin_menu'] = new Admin_Menu();
+			$this->handlers['admin_notices'] = new Admin_Notices();
+			$this->handlers['admin_notices']->init();
 		}
 	}
 

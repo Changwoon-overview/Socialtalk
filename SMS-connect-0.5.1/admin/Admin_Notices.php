@@ -31,8 +31,9 @@ class Admin_Notices {
 	 */
 	public function display_notices() {
 		// Check for general API credentials
-		$api_key    = get_option( 'sms_connect_api_key' );
-		$api_secret = get_option( 'sms_connect_api_secret' );
+		$sms_options = \get_option( 'sms_connect_options', [] );
+		$api_key     = $sms_options['api_key'] ?? '';
+		$api_secret  = $sms_options['api_secret'] ?? '';
 
 		if ( empty( $api_key ) || empty( $api_secret ) ) {
 			$settings_url = admin_url( 'admin.php?page=sms-connect-settings' );
@@ -40,27 +41,36 @@ class Admin_Notices {
 				'error',
 				sprintf(
 					// translators: %s: settings page URL
-					__( '<strong>[SMS Connect]</strong> SMS API Key or Secret is missing. Please <a href="%s">enter your credentials</a> to enable SMS sending.', 'sms-connect' ),
+					__( '<strong>[SMS 연결]</strong> SMS API 키 또는 시크릿이 누락되었습니다. SMS 발송을 활성화하려면 <a href="%s">인증 정보를 입력</a>하세요.', 'sms-connect' ),
 					esc_url( $settings_url )
 				)
 			);
 		}
 
 		// Check for Alimtalk API credentials
-		$alimtalk_api_key    = get_option( 'sms_connect_alimtalk_api_key' );
-		$alimtalk_api_secret = get_option( 'sms_connect_alimtalk_api_secret' );
-		$alimtalk_sender_key = get_option( 'sms_connect_alimtalk_sender_key' );
+		$alimtalk_options    = \get_option( 'sms_connect_alimtalk_options', [] );
+		$alimtalk_api_key    = $alimtalk_options['api_key'] ?? '';
+		$alimtalk_sender_key = $alimtalk_options['sender_key'] ?? '';
 
-		if ( empty( $alimtalk_api_key ) || empty( $alimtalk_api_secret ) || empty($alimtalk_sender_key) ) {
+		if ( empty( $alimtalk_api_key ) || empty( $alimtalk_sender_key ) ) {
 			$settings_url = admin_url( 'admin.php?page=sms-connect-alimtalk-settings' );
 			$this->render_notice(
 				'warning',
 				sprintf(
 					// translators: %s: settings page URL
-					__( '<strong>[SMS Connect]</strong> Alimtalk credentials are not fully configured. Please <a href="%s">visit the settings page</a> to enable Alimtalk sending.', 'sms-connect' ),
+					__( '<strong>[SMS 연결]</strong> 알림톡 인증 정보가 완전히 설정되지 않았습니다. 알림톡 발송을 활성화하려면 <a href="%s">설정 페이지를 방문</a>하세요.', 'sms-connect' ),
 					esc_url( $settings_url )
 				)
 			);
+		}
+
+		// Show activation success notice if this is a fresh activation
+		if ( \get_transient( 'sms_connect_activation_notice' ) ) {
+			$this->render_notice(
+				'success',
+				\__( '<strong>[SMS 연결]</strong> 플러그인이 성공적으로 활성화되었습니다! 설정을 완료하여 SMS 및 알림톡 기능을 사용하세요.', 'sms-connect' )
+			);
+			\delete_transient( 'sms_connect_activation_notice' );
 		}
 	}
 

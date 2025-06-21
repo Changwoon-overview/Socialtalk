@@ -1,61 +1,58 @@
-=== SMS Connect ===
-Contributors: (your-name)
-Tags: woocommerce, sms, alimtalk, messaging, notifications
+=== SMS 연결 ===
+Contributors: (여기에 기여자 이름 입력)
+Tags: sms, 알림톡, woocommerce, 주문알림, 문자발송
 Requires at least: 5.0
-Tested up to: 6.0
-Stable tag: 0.0.1
+Tested up to: 6.4
+Stable tag: 0.5.1
+Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-A powerful and easy-to-use plugin to send SMS and Alimtalk notifications for WooCommerce order status changes. Keep your customers informed automatically.
+우커머스와 워드프레스를 위한 SMS 및 알림톡 발송 플러그인입니다.
 
-== Description ==
+== 설명 ==
 
-SMS Connect provides a seamless integration between your WooCommerce store and popular messaging services. Automate customer notifications by sending SMS, LMS, or Kakao Alimtalk messages whenever an order status is updated.
+SMS 연결은 우커머스 쇼핑몰 운영자를 위한 강력한 SMS 및 알림톡 발송 플러그인입니다.
 
-This plugin allows you to:
-*   **Automate Notifications:** Automatically send messages for any WooCommerce order status (e.g., Pending, Processing, Completed).
-*   **Customize Messages:** Use template variables like `{customer_name}`, `{order_id}`, and `{order_total}` to create personalized messages.
-*   **SMS & LMS Support:** Automatically detects message length and sends as SMS or long-form LMS.
-*   **Kakao Alimtalk Integration:** Send official Kakao Alimtalk messages using pre-approved templates for reliable delivery.
-*   **Detailed Sending History:** Keep a log of every message sent, including status, recipient, and content.
-*   **Dashboard Overview:** Check your message credit balance and view sending statistics at a glance.
+주요 기능:
+* 주문 상태 변경 시 고객에게 자동 SMS 발송
+* 신규 회원가입 시 관리자에게 알림
+* 구독 상태 변경 알림
+* 카카오 알림톡 발송 지원
+* 포인트 부족 시 관리자 알림
+* 발송 기록 및 통계 관리
+* 고급 발송 규칙 설정
 
-== Installation ==
+== 설치 방법 ==
 
-1.  Upload the `sms-connect` folder to the `/wp-content/plugins/` directory.
-2.  Activate the plugin through the 'Plugins' menu in WordPress.
-3.  Go to `SMS Connect > General Settings` to enter your API credentials for SMS sending.
-4.  Go to `SMS Connect > Alimtalk Settings` to enter your credentials for Alimtalk sending.
-5.  Configure your message templates for each order status in the `SMS Settings` and `Alimtalk Settings` pages.
+1. 플러그인을 업로드하고 활성화합니다.
+2. 'SMS 연결' 메뉴에서 API 인증 정보를 입력합니다.
+3. 원하는 알림 설정을 구성합니다.
+4. 발송 테스트를 진행합니다.
 
-== Frequently Asked Questions ==
+== 자주 묻는 질문 ==
 
-= Which messaging APIs are supported? =
+= API 키는 어디서 받을 수 있나요? =
 
-This plugin is designed to be flexible. The initial version is built with compatibility for CoolSMS, but the structure allows for adding other API providers in the future.
+SMS 서비스 제공업체에서 API 키를 발급받으실 수 있습니다.
 
-= What's the difference between SMS and Alimtalk? =
+= 알림톡 사용을 위해 필요한 것은? =
 
-SMS are standard text messages. Kakao Alimtalk are template-based informational messages sent via KakaoTalk, often used for official notifications like order confirmations. They require pre-approval of your templates.
+카카오 비즈니스 채널과 알림톡 서비스 신청이 필요합니다.
 
-= How are template variables used? =
+== 스크린샷 ==
 
-In the SMS or Alimtalk message settings, you can use placeholders like `{customer_name}`. When a message is sent, the plugin automatically replaces these with the actual order data.
+1. 대시보드 - 발송 통계와 계정 잔액 확인
+2. 기본 설정 - API 인증 정보 입력
+3. SMS 설정 - 발송 옵션 구성
+4. 알림톡 설정 - 카카오 알림톡 설정
+5. 발송 기록 - 상세한 발송 이력 관리
 
-== Screenshots ==
+== 변경 기록 ==
 
-1. Dashboard overview with account balance and sending stats.
-2. Sending history log with detailed information.
-3. SMS settings page for each order status.
-4. Alimtalk settings page.
-
-== Changelog ==
-
-= 0.0.1 =
-*   Initial release.
-
-== Upgrade Notice ==
-
-= 0.0.1 =
-*   Initial release of the plugin. 
+= 0.5.1 =
+* 초기 릴리스
+* 기본 SMS 발송 기능
+* 알림톡 발송 지원
+* 우커머스 통합
+* 발송 기록 관리 

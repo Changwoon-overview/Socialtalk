@@ -7,6 +7,8 @@
 
 namespace SmsConnect\API;
 
+use WP_Error;
+
 // Exit if accessed directly.
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -28,11 +30,10 @@ class Alimtalk_Api_Client {
 	private static $instance = null;
 
 	/**
-	 * The base URL for the API.
-	 *
+	 * The API URL.
 	 * @var string
 	 */
-	private $api_url = '';
+	private $api_url = 'https://api.coolsms.co.kr'; // Using the same provider for consistency
 
 	/**
 	 * The API key (or User ID).
@@ -54,12 +55,10 @@ class Alimtalk_Api_Client {
 	 * Private constructor to prevent direct instantiation.
 	 */
 	private function __construct() {
-		// These settings will be loaded from a dedicated Alimtalk settings page.
-		$options = get_option( 'sms_connect_alimtalk_options' ); // Assumes new option group
+		$options = \get_option( 'sms_connect_alimtalk_options' );
 
-		$this->api_url    = 'https://api.alimtalk.provider.com'; // Placeholder
-		$this->api_key    = isset( $options['api_key'] ) ? trim( $options['api_key'] ) : '';
-		$this->sender_key = isset( $options['sender_key'] ) ? trim( $options['sender_key'] ) : '';
+		$this->api_key    = $options['api_key'] ?? '';
+		$this->sender_key = $options['sender_key'] ?? '';
 	}
 
 	/**
@@ -82,37 +81,47 @@ class Alimtalk_Api_Client {
 	 * @param array  $template_vars Associative array of template variables.
 	 * @return array|\WP_Error The response from the API.
 	 */
-	public function send_request( $template_code, $recipient, $template_vars = [] ) {
+	public function send_alimtalk( $template_code, $recipient, $template_vars = [] ) {
 		if ( empty( $this->api_key ) || empty( $this->sender_key ) ) {
-			return new \WP_Error( 'invalid_credentials', 'API key or Sender Key is missing.' );
+			return new \WP_Error( 'invalid_credentials', 'Alimtalk API key or Sender Key is missing.' );
 		}
 
-		$url = $this->api_url . '/send/alimtalk'; // Example endpoint
-
-		$headers = [
-			// Headers might differ based on provider, e.g., 'X-API-KEY'
-			'Content-Type'  => 'application/json',
-			'Authorization' => 'Bearer ' . $this->api_key, 
-		];
+		$endpoint = '/alimtalk/v1/send'; // Example endpoint
 		
+		// This body structure is an example. It will vary by provider.
 		$body = [
 			'senderKey'    => $this->sender_key,
 			'templateCode' => $template_code,
 			'recipient'    => $recipient,
 			'variables'    => $template_vars,
-			// Other provider-specific fields might be needed
 		];
-
+		
 		$args = [
 			'method'  => 'POST',
-			'headers' => $headers,
-			'body'    => wp_json_encode( $body ),
+			'headers' => [
+				'Authorization' => "Bearer {$this->api_key}",
+				'Content-Type'  => 'application/json',
+			],
+			'body'    => \wp_json_encode( $body ),
 			'timeout' => 45,
 		];
 
-		$response = \wp_remote_post( $this->api_url, $args );
+		$response = \wp_remote_post( $this->api_url . $endpoint, $args );
 
 		$this->check_points_from_response( $response );
+
+		if ( \is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		$response_code = \wp_remote_retrieve_response_code( $response );
+		if ( $response_code < 200 || $response_code >= 300 ) {
+			$response_body = \wp_remote_retrieve_body( $response );
+			return new \WP_Error( 'api_error', 'Alimtalk API request failed.', [
+				'status' => $response_code,
+				'body'   => $response_body,
+			] );
+		}
 
 		return $response;
 	}

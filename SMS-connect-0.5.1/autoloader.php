@@ -33,14 +33,15 @@ function sms_connect_autoloader( $class ) {
 	// Get the relative class name.
 	$relative_class = substr( $class, $len );
 
-	// Replace the namespace prefix with the base directory, replace namespace
-	// separators with directory separators in the relative class name, append
-	// with .php
-    $parts = explode('\\', $relative_class);
-    if (isset($parts[0])) {
-        $parts[0] = strtolower($parts[0]);
-    }
-    $relative_path = implode('/', $parts);
+	// Handle classes in sub-namespaces (which correspond to lowercase directories)
+	if ( strpos( $relative_class, '\\' ) !== false ) {
+		$parts         = explode( '\\', $relative_class );
+		$parts[0]      = strtolower( $parts[0] ); // Lowercase the directory part of the namespace
+		$relative_path = implode( '/', $parts );
+	} else {
+		// Class is in the root namespace
+		$relative_path = $relative_class;
+	}
 
 	$file = $base_dir . $relative_path . '.php';
 

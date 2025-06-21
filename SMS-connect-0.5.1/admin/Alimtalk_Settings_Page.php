@@ -35,9 +35,15 @@ class Alimtalk_Settings_Page extends Base_Settings_Page {
 	 * Constructor.
 	 */
 	public function __construct() {
-		\add_action( 'admin_init', [ $this, 'register_settings' ] );
+		$this->add_hooks();
 	}
 
+	/**
+	 * Add hooks.
+	 */
+	private function add_hooks() {
+		\add_action( 'admin_init', [ $this, 'register_settings' ] );
+	}
 	/**
 	 * Register settings, sections, and fields.
 	 */
@@ -54,30 +60,29 @@ class Alimtalk_Settings_Page extends Base_Settings_Page {
 			[ $this, 'sanitize_admin_settings' ]
 		);
 
-		// Section for API credentials
+		// Register settings sections
 		\add_settings_section(
-			'sms_connect_alimtalk_api_section',
-			\__( 'Alimtalk API Credentials', 'sms-connect' ),
-			null,
+			'sms_connect_alimtalk_section',
+			\__( '알림톡 API 설정', 'sms-connect' ),
+			[ $this, 'render_section_info' ],
 			$this->option_group
 		);
 
+		// Add settings fields
 		\add_settings_field(
 			'api_key',
-			\__( 'API Key (User ID)', 'sms-connect' ),
-			[ $this, 'render_text_field' ],
+			\__( 'API 키', 'sms-connect' ),
+			[ $this, 'render_api_key_field' ],
 			$this->option_group,
-			'sms_connect_alimtalk_api_section',
-			[ 'id' => 'api_key', 'type' => 'text' ]
+			'sms_connect_alimtalk_section'
 		);
 
 		\add_settings_field(
 			'sender_key',
-			\__( 'Sender Key', 'sms-connect' ),
-			[ $this, 'render_text_field' ],
+			\__( '발송자 키', 'sms-connect' ),
+			[ $this, 'render_sender_key_field' ],
 			$this->option_group,
-			'sms_connect_alimtalk_api_section',
-			[ 'id' => 'sender_key', 'type' => 'text' ]
+			'sms_connect_alimtalk_section'
 		);
 
 		// Admin Settings Section
@@ -105,32 +110,18 @@ class Alimtalk_Settings_Page extends Base_Settings_Page {
 			$this->option_group
 		);
 
-		// Dynamically add a field for each WooCommerce order status
-		if ( \function_exists( 'wc_get_order_statuses' ) ) {
-			$order_statuses = \wc_get_order_statuses();
-
-			// Add subscription statuses if the plugin is active
-			if ( \class_exists( 'WC_Subscriptions' ) ) {
-				$subscription_statuses = [
-					'wc-subscription-payment-complete' => \__( '정기결제 갱신 완료', 'sms-connect' ),
-					'wc-subscription-cancelled'        => \__( '정기결제 취소됨', 'sms-connect' ),
-					'wc-subscription-on-hold'          => \__( '정기결제 보류됨', 'sms-connect' ),
-					'wc-subscription-expired'          => \__( '정기결제 만료됨', 'sms-connect' ),
-				];
-				$order_statuses = \array_merge( $order_statuses, $subscription_statuses );
-			}
-
-			foreach ( $order_statuses as $status => $label ) {
-				\add_settings_field(
-					$status,
-					$label,
-					[ $this, 'render_text_field' ],
-					$this->option_group,
-					'sms_connect_alimtalk_template_section',
-					[ 'id' => $status, 'type' => 'text', 'placeholder' => \__( 'Enter Alimtalk template code', 'sms-connect' ) ]
-				);
-			}
+		$all_statuses = $this->get_all_statuses();
+		foreach ( $all_statuses as $status => $label ) {
+			\add_settings_field(
+				$status,
+				$label,
+				[ $this, 'render_text_field' ],
+				$this->option_group,
+				'sms_connect_alimtalk_template_section',
+				[ 'id' => $status, 'type' => 'text', 'placeholder' => \__( 'Enter Alimtalk template code', 'sms-connect' ) ]
+			);
 		}
+
 
 		// Section for user related events
 		\add_settings_section(
@@ -171,9 +162,23 @@ class Alimtalk_Settings_Page extends Base_Settings_Page {
 			return $sanitized_input;
 		}
 
+		$all_statuses = $this->get_all_statuses();
+
 		// Sanitize all inputs
 		foreach ( $input as $key => $value ) {
-			$sanitized_input[ $key ] = \sanitize_text_field( $value );
+			if ( strpos( $key, 'send_to_admin_' ) === 0 ) {
+				$sanitized_input[ $key ] = 'yes'; // Only 'yes' is stored.
+			} else {
+				$sanitized_input[ $key ] = \sanitize_text_field( $value );
+			}
+		}
+
+		// Ensure checkboxes that are not checked are saved as 'no'
+		foreach ( $all_statuses as $status => $label ) {
+			$admin_key = 'send_to_admin_' . $status;
+			if ( ! isset( $input[ $admin_key ] ) ) {
+				$sanitized_input[ $admin_key ] = 'no';
+			}
 		}
 
 		return $sanitized_input;
@@ -185,6 +190,63 @@ class Alimtalk_Settings_Page extends Base_Settings_Page {
 	public function render_template_section_info() {
 		echo '<p>' . \esc_html__( 'Enter the Alimtalk Template Code for each order status.', 'sms-connect' ) . '</p>';
 	}
+
+	/**
+	 * Render the info for the section.
+	 */
+	public function render_section_info() {
+		echo '<p>' . \esc_html__( 'Enter your Alimtalk API credentials.', 'sms-connect' ) . '</p>';
+	}
+
+	/**
+	 * Render the API key field.
+	 */
+	public function render_api_key_field() {
+		$options = \get_option( $this->option_name );
+		\printf(
+			'<input type="text" id="api_key" name="%s[api_key]" value="%s" class="regular-text" />',
+			\esc_attr( $this->option_name ),
+			isset( $options['api_key'] ) ? \esc_attr( $options['api_key'] ) : ''
+		);
+	}
+
+	/**
+	 * Render the sender key field.
+	 */
+	public function render_sender_key_field() {
+		$options = \get_option( $this->option_name );
+		\printf(
+			'<input type="text" id="sender_key" name="%s[sender_key]" value="%s" class="regular-text" />',
+			\esc_attr( $this->option_name ),
+			isset( $options['sender_key'] ) ? \esc_attr( $options['sender_key'] ) : ''
+		);
+		echo '<p class="description">' . \esc_html__( 'Enter your Kakao Alimtalk sender key.', 'sms-connect' ) . '</p>';
+	}
+
+	/**
+	 * Get all order and subscription statuses.
+	 *
+	 * @return array
+	 */
+	private function get_all_statuses() {
+		$all_statuses = [];
+		if ( \function_exists( 'wc_get_order_statuses' ) ) {
+			$all_statuses = \wc_get_order_statuses();
+		}
+
+		if ( \class_exists( 'WC_Subscriptions' ) ) {
+			$subscription_statuses = [
+				'wc-subscription-payment-complete' => \__( '정기결제 갱신 완료', 'sms-connect' ),
+				'wc-subscription-cancelled'        => \__( '정기결제 취소됨', 'sms-connect' ),
+				'wc-subscription-on-hold'          => \__( '정기결제 보류됨', 'sms-connect' ),
+				'wc-subscription-expired'          => \__( '정기결제 만료됨', 'sms-connect' ),
+			];
+			$all_statuses = \array_merge( $all_statuses, $subscription_statuses );
+		}
+
+		return $all_statuses;
+	}
+
 
 	/**
 	 * Render a text field for a given status.
@@ -208,34 +270,15 @@ class Alimtalk_Settings_Page extends Base_Settings_Page {
 			\esc_attr( $placeholder )
 		);
 
-		// Get all possible statuses to check if this field is an order status.
-		$is_order_status = false;
-		$all_order_statuses = [];
-		if ( \function_exists( 'wc_get_order_statuses' ) ) {
-			$all_order_statuses = \wc_get_order_statuses();
-			if ( \class_exists( 'WC_Subscriptions' ) ) {
-				$subscription_statuses = [
-					'wc-subscription-payment-complete' => \__( '정기결제 갱신 완료', 'sms-connect' ),
-					'wc-subscription-cancelled'        => \__( '정기결제 취소됨', 'sms-connect' ),
-					'wc-subscription-on-hold'          => \__( '정기결제 보류됨', 'sms-connect' ),
-					'wc-subscription-expired'          => \__( '정기결제 만료됨', 'sms-connect' ),
-				];
-				$all_order_statuses = \array_merge( $all_order_statuses, $subscription_statuses );
-			}
-		}
-		if ( \array_key_exists( $id, $all_order_statuses ) ) {
-			$is_order_status = true;
-		}
-
 		// Add 'Send to Admin' checkbox for order statuses
-		if ( $is_order_status ) {
-			$admin_options       = \get_option( $this->admin_option_name, [] );
+		$all_statuses = $this->get_all_statuses();
+		if ( \array_key_exists( $id, $all_statuses ) ) {
 			$send_to_admin_key   = 'send_to_admin_' . $id;
-			$send_to_admin_value = $admin_options[ $send_to_admin_key ] ?? 'no';
+			$send_to_admin_value = $options[ $send_to_admin_key ] ?? 'no';
 
 			\printf(
 				'<p><label><input type="checkbox" name="%s[%s]" value="yes" %s> %s</label></p>',
-				\esc_attr( $this->admin_option_name ),
+				\esc_attr( $this->option_name ), // Save to the same option name
 				\esc_attr( $send_to_admin_key ),
 				\checked( 'yes', $send_to_admin_value, false ),
 				\esc_html__( '관리자에게도 발송', 'sms-connect' )
