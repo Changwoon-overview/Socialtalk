@@ -107,9 +107,26 @@ class Alimtalk_Api_Client {
 
 		$response = wp_remote_post( $url, $args );
 
-		// Check for success or failure, potentially with a fallback to SMS
-		if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
-			// Trigger fallback to SMS here later
+		// After a successful request, check the balance.
+		if ( ! is_wp_error( $response ) && 200 === wp_remote_retrieve_response_code( $response ) ) {
+			$response_body = wp_remote_retrieve_body( $response );
+			$data = json_decode( $response_body, true );
+
+			// Check for balance/point in the response data. The key might differ by API provider.
+			$current_points = 0;
+			if ( isset( $data['point'] ) ) {
+				$current_points = (int) $data['point'];
+			} elseif ( isset( $data['balance'] ) ) {
+				$current_points = (int) $data['balance'];
+			}
+
+			if ( $current_points > 0 ) {
+				// Get the Message Manager and run the check.
+				$sms_connect = \SmsConnect\Sms_Connect::instance();
+				if ( isset( $sms_connect->handlers['message_manager'] ) ) {
+					$sms_connect->handlers['message_manager']->check_and_notify_low_points( $current_points );
+				}
+			}
 		}
 
 		return $response;

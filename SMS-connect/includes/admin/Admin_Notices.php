@@ -65,6 +65,23 @@ class Admin_Notices {
 	}
 
 	/**
+	 * Renders a notice indicating that WooCommerce is not active.
+	 * Static so it can be called without instantiating the class.
+	 */
+	public static function show_woocommerce_not_active_notice() {
+		$message = sprintf(
+			// translators: %s: Plugin name
+			__( '<strong>%s</strong> requires WooCommerce to be installed and active. Please install and activate WooCommerce.', 'sms-connect' ),
+			'SMS-connect'
+		);
+		?>
+		<div class="notice notice-error">
+			<p><?php echo wp_kses_post( $message ); ?></p>
+		</div>
+		<?php
+	}
+
+	/**
 	 * Renders a single admin notice.
 	 *
 	 * @param string $type    The notice type (e.g., 'error', 'warning', 'success', 'info').

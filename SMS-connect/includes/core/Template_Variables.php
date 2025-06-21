@@ -169,33 +169,42 @@ class Template_Variables {
 	 * @return array The key-value array of variables.
 	 */
 	public function extract_variables_for_api( $content, $source_object, $extra_data = [] ) {
-		$api_vars = [];
-
-		preg_match_all( '/#{\s*([^}]+)\s*}/', $content, $matches );
-
-		if ( empty( $matches[1] ) ) {
-			return $api_vars;
-		}
-
-		// Get a flat list of all possible replaceable values
 		$this->source_object = $source_object;
-		$this->extra_data = $extra_data;
+		$this->extra_data    = $extra_data;
+		$api_vars            = [];
+
+		// Get a flat list of all possible replaceable values from our system.
 		$all_values = $this->get_all_possible_values();
 
-		foreach ( $matches[1] as $variable_name ) {
-			// Note: Alimtalk variables don't use {}, so we map `고객명` to `customer_name`
-			// This part requires a mapping layer if variable names differ.
-			// For now, we assume direct mapping is possible or handled elsewhere.
-			// Let's create a simple mapping for this example.
-			$key_map = [
-				'고객명' => 'customer_name',
-				'주문번호' => 'order_number',
-                // Add other Alimtalk-specific to internal variable mappings here
-			];
-			$internal_key = isset($key_map[$variable_name]) ? $key_map[$variable_name] : $variable_name;
-			
-			if ( isset( $all_values[ $internal_key ] ) ) {
-				$api_vars[ '#{' . $variable_name . '}' ] = $all_values[ $internal_key ];
+		// Define the mapping from our internal variable names to Alimtalk template variables.
+		// This is the single source of truth for Alimtalk variables.
+		$variable_mapping = [
+			'customer_name'     => '고객명',
+			'customer_fullname' => '고객명', // Map both to the same Alimtalk variable
+			'order_id'          => '주문ID',
+			'order_number'      => '주문번호',
+			'order_date'        => '주문일자',
+			'order_total'       => '주문금액',
+			'billing_phone'     => '연락처',
+			'shop_name'         => '상점명',
+			'user_id'           => '회원ID',
+			'user_login'        => '회원아이디',
+			'user_email'        => '이메일',
+			'user_display_name' => '회원이름',
+			'subscription_id'           => '구독ID',
+			'subscription_status'       => '구독상태',
+			'subscription_start_date'   => '구독시작일',
+			'subscription_next_payment' => '다음결제일',
+		];
+
+		// Allow developers to modify the mapping.
+		$variable_mapping = apply_filters('sms_connect_alimtalk_variable_mapping', $variable_mapping);
+
+		// Iterate through our internal variables and see if they have a mapping.
+		foreach ( $all_values as $internal_key => $value ) {
+			if ( isset( $variable_mapping[ $internal_key ] ) ) {
+				$alimtalk_key = '#{' . $variable_mapping[ $internal_key ] . '}';
+				$api_vars[ $alimtalk_key ] = $value;
 			}
 		}
 
@@ -230,8 +239,20 @@ class Template_Variables {
 				'billing_phone'     => get_user_meta($user->ID, 'billing_phone', true),
 				'shop_name'         => get_bloginfo( 'name' ),
 			], $this->extra_data);
-		}
-		// Add other object types like WC_Subscription here if needed
+        } elseif ( $this->source_object instanceof \WC_Subscription ) {
+            $subscription = $this->source_object;
+            return array_merge([
+                'subscription_id'           => $subscription->get_id(),
+                'subscription_status'       => wcs_get_subscription_status_name($subscription->get_status()),
+                'subscription_start_date'   => wc_format_datetime( $subscription->get_date_created() ),
+                'subscription_next_payment' => wc_format_datetime( $subscription->get_date('next_payment') ),
+                'customer_name'             => $subscription->get_billing_first_name(),
+                'customer_fullname'         => $subscription->get_formatted_billing_full_name(),
+                'billing_phone'             => $subscription->get_billing_phone(),
+                'shop_name'                 => get_bloginfo( 'name' ),
+            ], $this->extra_data);
+        }
+		// Add other object types here if needed
 		return $this->extra_data;
 	}
 } 

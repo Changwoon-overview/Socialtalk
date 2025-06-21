@@ -44,7 +44,6 @@ class WC_Hooks {
 			if ( ! empty( $rule['alimtalk_template_code'] ) ) {
 				$this->send_alimtalk( $rule['alimtalk_template_code'], $order );
 			}
-			// 참고: 현재 send_sms는 메시지 내용을 직접 받습니다. 규칙 설정의 'SMS 템플릿 ID' 필드에 메시지 내용을 직접 입력해야 합니다.
 			if ( ! empty( $rule['sms_template_id'] ) ) {
 				$this->send_sms( $rule['sms_template_id'], $order );
 			}
@@ -52,21 +51,18 @@ class WC_Hooks {
 		}
 
 		// --- 고급 규칙이 없을 경우, 기존 기본 로직을 실행합니다 ---
-		// Get Alimtalk settings first to prioritize it
 		$alimtalk_options = get_option( 'sms_connect_alimtalk_options', [] );
-		$status_key = 'wc-' . $new_status;
-		$template_key = 'template_' . $status_key;
+		$sms_options      = get_option( 'sms_connect_sms_options', [] );
 
 		// --- Try to send Alimtalk first ---
-		if ( isset( $alimtalk_options[ $template_key ] ) && ! empty( $alimtalk_options[ $template_key ] ) ) {
-			$this->send_alimtalk( $alimtalk_options[ $template_key ], $order );
+		if ( ! empty( $alimtalk_options[ $new_status ] ) ) {
+			$this->send_alimtalk( $alimtalk_options[ $new_status ], $order, $alimtalk_options );
 			return; // Stop further processing if Alimtalk is attempted
 		}
 
 		// --- Fallback to SMS if Alimtalk is not configured ---
-		$sms_options = get_option( 'sms_connect_sms_options', [] );
-		if ( isset( $sms_options[ $status_key ] ) && ! empty( $sms_options[ $status_key ] ) ) {
-			$this->send_sms( $sms_options[ $status_key ], $order );
+		if ( ! empty( $sms_options[ $new_status ] ) ) {
+			$this->send_sms( $sms_options[ $new_status ], $order, $sms_options );
 		}
 	}
 
@@ -75,46 +71,61 @@ class WC_Hooks {
 	 *
 	 * @param string    $template_code The Alimtalk template code.
 	 * @param \WC_Order $order The order object.
+	 * @param array     $options The alimtalk options.
 	 */
-	private function send_alimtalk( $template_code, $order ) {
+	private function send_alimtalk( $template_code, $order, $options = [] ) {
 		$sms_connect = \SmsConnect\Sms_Connect::instance();
-		$recipient = $order->get_billing_phone();
+		$recipients  = [ $order->get_billing_phone() ];
 
-		// Alimtalk templates use specific variables. We get the raw template first to find the variables.
-		$alimtalk_templates = get_option( 'sms_connect_alimtalk_templates', [] );
-		$message_template = isset($alimtalk_templates[ $order->get_status() ]['message']) ? $alimtalk_templates[ $order->get_status() ]['message'] : '';
-		
-		// This will replace variables like #{고객명} with actual data.
-		$message_with_vars = $sms_connect->handlers['template_variables']->replace_variables( $message_template, $order );
-		
-		// The API requires the variables in a structured way, not the final message.
-		$template_vars = $sms_connect->handlers['template_variables']->extract_variables_for_api( $message_template, $order );
-
-		// Actually send the request
-		$response = $sms_connect->handlers['alimtalk_api_client']->send_request( $template_code, $recipient, $template_vars );
-		
-		$status = 'Success';
-		$response_body = '';
-
-		if ( is_wp_error( $response ) ) {
-			$status        = 'Failure';
-			$response_body = $response->get_error_message();
-		} elseif ( 200 !== wp_remote_retrieve_response_code( $response ) ) {
-			$status        = 'Failure';
-			$response_body = wp_remote_retrieve_body( $response );
-		} else {
-			$response_body = wp_remote_retrieve_body( $response );
+		// If options are not passed, get them.
+		if ( empty( $options ) || ! is_array( $options ) ) {
+			$options = get_option( 'sms_connect_alimtalk_options', [] );
 		}
 
-		$this->log_to_db( [
-			'order_id'      => $order->get_id(),
-			'recipient'     => $recipient,
-			'type'          => 'Alimtalk',
-			'status'        => $status,
-			'message'       => $message_with_vars, // Log the final message for clarity
-			'template_code' => $template_code,
-			'response'      => is_array( $response_body ) ? wp_json_encode( $response_body ) : $response_body,
-		] );
+		// Check if we need to send to admin as well
+		$send_to_admin_key = 'send_to_admin_' . $order->get_status();
+
+		if ( ! empty( $options[ $send_to_admin_key ] ) && 'yes' === $options[ $send_to_admin_key ] ) {
+			$admin_phones = $sms_connect->handlers['message_manager']->get_admin_phone_numbers();
+			$recipients   = array_merge( $recipients, $admin_phones );
+			$recipients   = array_unique( $recipients );
+		}
+
+		// For Alimtalk, we just need to extract variables for the API, not build a message.
+		$template_vars     = $sms_connect->handlers['template_variables']->extract_variables_for_api( '', $order );
+		$message_with_vars = sprintf( __( 'Alimtalk sent for order %s, status %s.', 'sms-connect' ), $order->get_id(), $order->get_status() );
+
+
+		foreach ( $recipients as $recipient ) {
+			if ( empty( $recipient ) ) {
+				continue;
+			}
+			// Actually send the request
+			$response = $sms_connect->handlers['alimtalk_api_client']->send_request( $template_code, $recipient, $template_vars );
+
+			$status        = 'Success';
+			$response_body = '';
+
+			if ( is_wp_error( $response ) ) {
+				$status        = 'Failure';
+				$response_body = $response->get_error_message();
+			} elseif ( 200 !== wp_remote_retrieve_response_code( $response ) ) {
+				$status        = 'Failure';
+				$response_body = wp_remote_retrieve_body( $response );
+			} else {
+				$response_body = wp_remote_retrieve_body( $response );
+			}
+
+			$this->log_to_db( [
+				'order_id'      => $order->get_id(),
+				'recipient'     => $recipient,
+				'type'          => 'Alimtalk',
+				'status'        => $status,
+				'message'       => $message_with_vars, // Log a reference message.
+				'template_code' => $template_code,
+				'response'      => is_array( $response_body ) ? wp_json_encode( $response_body ) : $response_body,
+			] );
+		}
 	}
 
 	/**
@@ -122,47 +133,68 @@ class WC_Hooks {
 	 *
 	 * @param string    $message_template The message template string.
 	 * @param \WC_Order $order The order object.
+	 * @param array     $options The SMS options.
 	 */
-	private function send_sms( $message_template, $order ) {
+	private function send_sms( $message_template, $order, $options = [] ) {
 		$sms_connect = \SmsConnect\Sms_Connect::instance();
 
 		$message      = $sms_connect->handlers['template_variables']->replace_variables( $message_template, $order );
 		$message_type = $sms_connect->handlers['message_manager']->get_message_type( $message );
-		$recipient    = $order->get_billing_phone();
 		$sender       = get_option( 'sms_connect_sender_number', '' );
 
-		$api_data = [
-			'to'   => $recipient,
-			'from' => $sender,
-			'text' => $message,
-			'type' => $message_type,
-		];
+		$recipients = [ $order->get_billing_phone() ];
 
-		// Actually send the request
-		$response = $sms_connect->handlers['api_client']->send_request( '/messages/v4/send', $api_data );
+		// If options are not passed, get them.
+		if ( empty( $options ) || ! is_array( $options ) ) {
+			$options = get_option( 'sms_connect_sms_options', [] );
+		}
+		
+		// Check if we need to send to admin as well
+		$send_to_admin_key = 'send_to_admin_' . $order->get_status();
 
-		$status = 'Success';
-		$response_body = '';
-
-		if ( is_wp_error( $response ) ) {
-			$status        = 'Failure';
-			$response_body = $response->get_error_message();
-		} elseif ( 200 !== wp_remote_retrieve_response_code( $response ) ) {
-			$status        = 'Failure';
-			$response_body = wp_remote_retrieve_body( $response );
-		} else {
-			$response_body = wp_remote_retrieve_body( $response );
+		if ( ! empty( $options[ $send_to_admin_key ] ) && 'yes' === $options[ $send_to_admin_key ] ) {
+			$admin_phones = $sms_connect->handlers['message_manager']->get_admin_phone_numbers();
+			$recipients   = array_merge( $recipients, $admin_phones );
+			$recipients   = array_unique( $recipients );
 		}
 
+		foreach ( $recipients as $recipient ) {
+			if ( empty( $recipient ) ) {
+				continue;
+			}
+			$api_data = [
+				'to'   => $recipient,
+				'from' => $sender,
+				'text' => $message,
+				'type' => $message_type,
+			];
 
-		$this->log_to_db( [
-			'order_id'  => $order->get_id(),
-			'recipient' => $recipient,
-			'type'      => $message_type,
-			'status'    => $status,
-			'message'   => $message,
-			'response'  => is_array( $response_body ) ? wp_json_encode( $response_body ) : $response_body,
-		] );
+			// Actually send the request
+			$response = $sms_connect->handlers['api_client']->send_request( '/messages/v4/send', $api_data );
+
+			$status        = 'Success';
+			$response_body = '';
+
+			if ( is_wp_error( $response ) ) {
+				$status        = 'Failure';
+				$response_body = $response->get_error_message();
+			} elseif ( 200 !== wp_remote_retrieve_response_code( $response ) ) {
+				$status        = 'Failure';
+				$response_body = wp_remote_retrieve_body( $response );
+			} else {
+				$response_body = wp_remote_retrieve_body( $response );
+			}
+
+
+			$this->log_to_db( [
+				'order_id'  => $order->get_id(),
+				'recipient' => $recipient,
+				'type'      => $message_type,
+				'status'    => $status,
+				'message'   => $message,
+				'response'  => is_array( $response_body ) ? wp_json_encode( $response_body ) : $response_body,
+			] );
+		}
 	}
 
 	/**
